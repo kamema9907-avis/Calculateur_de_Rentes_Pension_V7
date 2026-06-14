@@ -419,6 +419,42 @@
                     </div>
                 </div>
 
+                <!-- AUTRE RENTE -->
+                <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--panel-border);">
+                    <label style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;">
+                        Autres Rentes (Imposables)
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="chk_autre_rente" onchange="toggleInputs()"> 
+                        Ajouter une autre rente / Rente de survivant
+                    </label>
+                    <div id="autre_rente_input_container" style="display: none; margin-top: 6px; margin-left: 24px;">
+                        <div class="input-row" style="margin-bottom: 6px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;">Montant ($)</label>
+                                <input type="number" id="in_autre_rente_montant" class="form-control" value="500" min="0" style="padding: 4px 8px; font-size:0.85rem;" oninput="calculate()">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;">Fréquence</label>
+                                <select id="in_autre_rente_freq" class="form-control" style="padding: 4px 8px; font-size:0.85rem;" onchange="calculate()">
+                                    <option value="mensuel">Mensuel</option>
+                                    <option value="annuel">Annuel</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="input-row" style="margin-bottom: 6px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;">Âge de début</label>
+                                <input type="number" id="in_autre_rente_debut" class="form-control" value="55" min="0" max="110" step="1" style="padding: 4px 8px; font-size:0.85rem;" oninput="calculate()">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;">Âge de fin</label>
+                                <input type="number" id="in_autre_rente_fin" class="form-control" value="110" min="0" max="110" step="1" style="padding: 4px 8px; font-size:0.85rem;" oninput="calculate()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- REER -->
                 <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--panel-border);">
                     <label style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;">
@@ -648,6 +684,7 @@
         function toggleInputs() {
             document.getElementById('rrq_input_container').style.display = document.getElementById('chk_rrq_60').checked ? 'block' : 'none';
             document.getElementById('sv_input_container').style.display = document.getElementById('chk_sv_65').checked ? 'block' : 'none';
+            document.getElementById('autre_rente_input_container').style.display = document.getElementById('chk_autre_rente').checked ? 'block' : 'none';
             document.getElementById('reer_input_container').style.display = document.getElementById('chk_reer').checked ? 'block' : 'none';
             document.getElementById('celi_input_container').style.display = document.getElementById('chk_celi').checked ? 'block' : 'none';
             document.getElementById('autres_input_container').style.display = document.getElementById('chk_autres').checked ? 'block' : 'none';
@@ -755,6 +792,19 @@
                 askSV = true;
                 svAge = 70;
                 svPercent = 1.36; // 136%
+            }
+
+            // Autre Rente Imposable
+            const askAutreRente = document.getElementById('chk_autre_rente').checked;
+            let autreRenteMensuelle = 0;
+            let autreRenteDebut = 55;
+            let autreRenteFin = 110;
+            if (askAutreRente) {
+                const amount = parseFloat(document.getElementById('in_autre_rente_montant').value) || 0;
+                const freq = document.getElementById('in_autre_rente_freq').value;
+                autreRenteMensuelle = freq === 'annuel' ? amount / 12 : amount;
+                autreRenteDebut = parseFloat(document.getElementById('in_autre_rente_debut').value) || 55;
+                autreRenteFin = parseFloat(document.getElementById('in_autre_rente_fin').value) || 110;
             }
 
             // Options REER
@@ -876,8 +926,13 @@
                 
                 if (reerStrategy === 'cible_nette') {
                     // Simulation complète pour trouver reerExhaustAge
+                    // On simule aussi le CELI et les Autres Placements mois par mois
                     let tempCapital = reerCapital;
                     let simAgeInMonths = totalAgeInMonths;
+                    let tempCeliCapital = askCELI ? celiCapital : 0;
+                    let tempAutresCapital = askAutres ? autresCapital : 0;
+                    const rMonthlyCeli_sim = askCELI ? (Math.pow(1 + celiReturn, 1/12) - 1) : 0;
+                    const rMonthlyAutres_sim = askAutres ? (Math.pow(1 + autresReturn, 1/12) - 1) : 0;
                     
                     while (tempCapital > 0 && simAgeInMonths < 110 * 12) {
                         let ageY = simAgeInMonths / 12;
@@ -890,11 +945,37 @@
                         let gRRQ_sim = (askRRQ && ageY >= rrqAge) ? (rrq65Estim * rrqPercent) : 0;
                         let gSV_sim = (askSV && ageY >= svAge) ? (svBaseAmount * svPercent) : 0;
                         
-                        let pCeli_sim = 0; 
+                        // Simulation CELI mois par mois
+                        let pCeli_sim = 0;
+                        if (askCELI && tempCeliCapital > 0) {
+                            if (celiStrategy === 'epuisement' && celiTargetAge > ageY) {
+                                let nM = (celiTargetAge - ageY) * 12;
+                                pCeli_sim = (rMonthlyCeli_sim > 0) ? (tempCeliCapital * rMonthlyCeli_sim) / (1 - Math.pow(1 + rMonthlyCeli_sim, -nM)) : (tempCeliCapital / nM);
+                            } else if (celiStrategy === 'fixe') {
+                                pCeli_sim = celiFixedAmountAnnual / 12;
+                            }
+                            if (pCeli_sim > tempCeliCapital) pCeli_sim = tempCeliCapital;
+                            tempCeliCapital = tempCeliCapital * (1 + rMonthlyCeli_sim) - pCeli_sim;
+                            if (tempCeliCapital < 0) tempCeliCapital = 0;
+                        }
+                        
+                        // Simulation Autres Placements mois par mois
                         let pAutres_sim = 0;
+                        if (askAutres && tempAutresCapital > 0) {
+                            if (autresStrategy === 'epuisement' && autresTargetAge > ageY) {
+                                let nM = (autresTargetAge - ageY) * 12;
+                                pAutres_sim = (rMonthlyAutres_sim > 0) ? (tempAutresCapital * rMonthlyAutres_sim) / (1 - Math.pow(1 + rMonthlyAutres_sim, -nM)) : (tempAutresCapital / nM);
+                            } else if (autresStrategy === 'fixe') {
+                                pAutres_sim = autresFixedAmountAnnual / 12;
+                            }
+                            if (pAutres_sim > tempAutresCapital) pAutres_sim = tempAutresCapital;
+                            tempAutresCapital = tempAutresCapital * (1 + rMonthlyAutres_sim) - pAutres_sim;
+                            if (tempAutresCapital < 0) tempAutresCapital = 0;
+                        }
                         
                         let pBase_sim = (ageY >= inPensionStartAge) ? basePensionMensuelle : 0;
-                        let brutHorsReer = pBase_sim + bSV_sim + bRRQ_sim + gRRQ_sim + gSV_sim + pAutres_sim;
+                        let pAutreRente_sim = (askAutreRente && ageY >= autreRenteDebut && ageY < autreRenteFin) ? autreRenteMensuelle : 0;
+                        let brutHorsReer = pBase_sim + bSV_sim + bRRQ_sim + gRRQ_sim + gSV_sim + pAutres_sim + pAutreRente_sim;
                         
                         let requiredReer = trouverRetraitReerPourCibleNet(reerTargetNet, brutHorsReer, pCeli_sim);
                         
@@ -1022,6 +1103,10 @@
             if (askREER && reerExhaustAge !== Infinity && reerExhaustAge > currentAgeDecimal) milestones.push(reerExhaustAge);
             if (askCELI && celiExhaustAge !== Infinity && celiExhaustAge > currentAgeDecimal) milestones.push(celiExhaustAge);
             if (askAutres && autresExhaustAge !== Infinity && autresExhaustAge > currentAgeDecimal) milestones.push(autresExhaustAge);
+            if (askAutreRente) {
+                if (autreRenteDebut > currentAgeDecimal) milestones.push(autreRenteDebut);
+                if (autreRenteFin > currentAgeDecimal) milestones.push(autreRenteFin);
+            }
             
             // Supprimer les doublons et trier
             milestones = [...new Set(milestones)].sort((a, b) => a - b);
@@ -1046,17 +1131,18 @@
                 
                 let p_celi = (askCELI && interval.start < celiExhaustAge) ? celiMonthlyWithdrawal : 0;
                 let p_autres = (askAutres && interval.start < autresExhaustAge) ? autresMonthlyWithdrawal : 0;
+                let p_autre_rente = (askAutreRente && interval.start >= autreRenteDebut && interval.start < autreRenteFin) ? autreRenteMensuelle : 0;
                 let p_reer = 0;
                 if (askREER && interval.start < reerExhaustAge) {
                     if (reerStrategy === 'cible_nette') {
-                        let brutHorsReer = p_base + p_sv_pont + p_rrq_pont + p_rrq_govt + p_sv_govt + p_autres;
+                        let brutHorsReer = p_base + p_sv_pont + p_rrq_pont + p_rrq_govt + p_sv_govt + p_autres + p_autre_rente;
                         p_reer = trouverRetraitReerPourCibleNet(reerTargetNet, brutHorsReer, p_celi);
                     } else {
                         p_reer = reerMonthlyWithdrawal;
                     }
                 }
                 
-                let p_brut = p_base + p_sv_pont + p_rrq_pont + p_rrq_govt + p_sv_govt + p_reer + p_autres;
+                let p_brut = p_base + p_sv_pont + p_rrq_pont + p_rrq_govt + p_sv_govt + p_reer + p_autres + p_autre_rente;
                 let revenuAnnuelBrut = p_brut * 12;
                 let calculImpot = calculerImpot(revenuAnnuelBrut);
                 let impotMensuel = calculImpot.impot / 12;
@@ -1076,6 +1162,7 @@
                         ${p_sv_govt > 0 ? `<li class="breakdown-item govt-income"><span>SV Gouv.</span> <span>${formatCurrency(p_sv_govt)}</span></li>` : ''}
                         ${p_reer > 0 ? `<li class="breakdown-item" style="color:#10b981;"><span>REER</span> <span>${formatCurrency(p_reer)}</span></li>` : ''}
                         ${p_celi > 0 ? `<li class="breakdown-item" style="color:#0ea5e9;"><span>CELI</span> <span>${formatCurrency(p_celi)}</span></li>` : ''}
+                        ${p_autre_rente > 0 ? `<li class="breakdown-item" style="color:#f59e0b;"><span>Autre Rente</span> <span>${formatCurrency(p_autre_rente)}</span></li>` : ''}
                         ${p_autres > 0 ? `<li class="breakdown-item" style="color:#d946ef;"><span>Autres</span> <span>${formatCurrency(p_autres)}</span></li>` : ''}
                     </ul>
                     <div class="phase-total"><span>Total Brut</span> <span>${formatCurrency(p_brut)}</span></div>
@@ -1135,6 +1222,18 @@
             const autresStrategy = document.getElementById('sel_autres_strategy').value;
             const autresTargetAge = parseFloat(document.getElementById('in_autres_target_age').value) || 85;
             const autresFixedAmountAnnual = parseFloat(document.getElementById('in_autres_fixed_amount').value) || 0;
+
+            const askAutreRente = document.getElementById('chk_autre_rente').checked;
+            let autreRenteMensuelle = 0;
+            let autreRenteDebut = 55;
+            let autreRenteFin = 110;
+            if (askAutreRente) {
+                const amount = parseFloat(document.getElementById('in_autre_rente_montant').value) || 0;
+                const freq = document.getElementById('in_autre_rente_freq').value;
+                autreRenteMensuelle = freq === 'annuel' ? amount / 12 : amount;
+                autreRenteDebut = parseFloat(document.getElementById('in_autre_rente_debut').value) || 55;
+                autreRenteFin = parseFloat(document.getElementById('in_autre_rente_fin').value) || 110;
+            }
             
             // Re-fetch base pension and govt info
             const service = parseFloat(document.getElementById('in_service').value);
@@ -1146,13 +1245,13 @@
             let rrqAge = parseFloat(document.getElementById('in_rrq_age').value) || 60;
             const rrq65Estim = parseFloat(document.getElementById('in_rrq_65_estim').value) || 0;
             let rrqPercent = parseFloat(document.getElementById('in_rrq_percent').value) / 100 || 0;
-            if (!askRRQ) { rrqAge = 72; rrqPercent = 1 + ((72 - 65) * 0.084); }
+            if (!askRRQ) { askRRQ = true; rrqAge = 72; rrqPercent = 1 + ((72 - 65) * 0.084); }
             
             let askSV = document.getElementById('chk_sv_65').checked;
             const svBaseAmount = parseFloat(document.getElementById('in_sv_amount').value) || 0;
             let svPercent = parseFloat(document.getElementById('in_sv_percent').value) / 100 || 1;
             let svAge = parseFloat(document.getElementById('in_sv_age').value) || 65;
-            if (!askSV) { svAge = 70; svPercent = 1.36; }
+            if (!askSV) { askSV = true; svAge = 70; svPercent = 1.36; }
             
             const totalAgeInMonths = (ageYears * 12) + ageMonths;
             let basePensionMensuelle = serviceReconnu * baseRate;
@@ -1231,7 +1330,8 @@
                             let gRRQ_sim = (askRRQ && currentAgeDecimalMonth >= rrqAge) ? rrqGovtMensuel : 0;
                             let gSV_sim = (askSV && currentAgeDecimalMonth >= svAge) ? svGovtMensuel : 0;
                             let pBase_sim = (currentAgeDecimalMonth >= inPensionStartAge) ? basePensionMensuelle : 0;
-                            let brutHorsReer = pBase_sim + bSV_sim + bRRQ_sim + gRRQ_sim + gSV_sim + autresWithMonthly;
+                            let pAutreRente_sim = (askAutreRente && currentAgeDecimalMonth >= autreRenteDebut && currentAgeDecimalMonth < autreRenteFin) ? autreRenteMensuelle : 0;
+                            let brutHorsReer = pBase_sim + bSV_sim + bRRQ_sim + gRRQ_sim + gSV_sim + autresWithMonthly + pAutreRente_sim;
                             reerWithMonthly = trouverRetraitReerPourCibleNet(reerTargetNet, brutHorsReer, celiWithMonthly);
                         }
                         if (reerWithMonthly > reerCapital) reerWithMonthly = reerCapital;

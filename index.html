@@ -1038,8 +1038,8 @@
             
             intervals.forEach((interval, index) => {
                 let p_base = (interval.start >= inPensionStartAge) ? basePensionMensuelle : 0;
-                let p_sv_pont = (interval.start >= 60 && interval.start < 65 && isEligibleSV) ? bridgeSVAmt : 0;
-                let p_rrq_pont = (interval.start >= 58 && interval.start < 60 && isEligibleRRQ) ? bridgeRRQAmt : 0;
+                let p_sv_pont = (interval.start >= inPensionStartAge && interval.start < 65 && isEligibleSV) ? bridgeSVAmt : 0;
+                let p_rrq_pont = (interval.start >= inPensionStartAge && interval.start < 60 && isEligibleRRQ) ? bridgeRRQAmt : 0;
                 
                 let p_rrq_govt = (interval.start >= rrqAge && askRRQ) ? rrqGovtMensuel : 0;
                 let p_sv_govt = (interval.start >= svAge && askSV) ? svGovtMensuel : 0;

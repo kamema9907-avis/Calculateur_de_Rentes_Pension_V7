@@ -221,6 +221,59 @@
             box-shadow: 0 0 8px var(--accent-glow);
         }
 
+        .save-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .btn-save, .btn-reset {
+            flex: 1;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 10px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            letter-spacing: 0.3px;
+        }
+        .btn-save {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+        .btn-save:hover {
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+            transform: translateY(-1px);
+        }
+        .btn-reset {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .btn-reset:hover {
+            background: rgba(239, 68, 68, 0.25);
+        }
+        .save-notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: linear-gradient(135deg, #1e293b, #334155);
+            color: #f8fafc;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+            z-index: 9999;
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .save-notification.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
         .tooltip-text {
             visibility: hidden;
             opacity: 0;
@@ -576,6 +629,10 @@
             </div>
 
             <button class="btn-calculate" onclick="calculate()" style="margin-top: 16px;">Calculer les Rentes</button>
+            <div class="save-actions">
+                <button class="btn-save" onclick="sauvegarderDonnees()">💾 Sauvegarder</button>
+                <button class="btn-reset" onclick="reinitialiserDonnees()">🔄 Réinitialiser</button>
+            </div>
         </div>
 
         <!-- Panneau des résultats -->
@@ -1449,9 +1506,103 @@
             });
         }
 
+        // === SAUVEGARDE localStorage ===
+        const STORAGE_KEY = 'calculateur_rentes_donnees';
+
+        const CHAMPS_INPUTS = [
+            'in_age_years', 'in_age_months', 'in_service', 'in_service_reconnu',
+            'in_base_rate', 'in_rrq_max', 'in_rrq_65_estim', 'in_rrq_age',
+            'in_sv_age', 'in_sv_amount',
+            'in_autre_rente_montant', 'in_autre_rente_debut', 'in_autre_rente_fin',
+            'in_reer_capital', 'in_reer_return', 'in_reer_target_age',
+            'in_reer_fixed_amount', 'in_reer_target_net',
+            'in_celi_capital', 'in_celi_return', 'in_celi_target_age', 'in_celi_fixed_amount',
+            'in_autres_capital', 'in_autres_return', 'in_autres_target_age', 'in_autres_fixed_amount'
+        ];
+        const CHAMPS_CHECKBOXES = [
+            'chk_rrq_60', 'chk_sv_65', 'chk_autre_rente', 'chk_reer', 'chk_celi', 'chk_autres'
+        ];
+        const CHAMPS_SELECTS = [
+            'sel_reer_strategy', 'sel_celi_strategy', 'sel_autres_strategy', 'in_autre_rente_freq'
+        ];
+
+        function sauvegarderDonnees() {
+            const data = {};
+            CHAMPS_INPUTS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) data[id] = el.value;
+            });
+            CHAMPS_CHECKBOXES.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) data[id] = el.checked;
+            });
+            CHAMPS_SELECTS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) data[id] = el.value;
+            });
+            // Sauvegarder aussi le champ pension_start_age s'il existe
+            const pensionStart = document.getElementById('in_pension_start_age');
+            if (pensionStart) data['in_pension_start_age'] = pensionStart.value;
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            afficherNotification('✅ Données sauvegardées avec succès !');
+        }
+
+        function chargerDonnees() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) return false;
+            
+            try {
+                const data = JSON.parse(saved);
+                CHAMPS_INPUTS.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && data[id] !== undefined) el.value = data[id];
+                });
+                CHAMPS_CHECKBOXES.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && data[id] !== undefined) el.checked = data[id];
+                });
+                CHAMPS_SELECTS.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && data[id] !== undefined) el.value = data[id];
+                });
+                const pensionStart = document.getElementById('in_pension_start_age');
+                if (pensionStart && data['in_pension_start_age'] !== undefined) {
+                    pensionStart.value = data['in_pension_start_age'];
+                }
+                return true;
+            } catch (e) {
+                console.error('Erreur de chargement des données :', e);
+                return false;
+            }
+        }
+
+        function reinitialiserDonnees() {
+            if (!confirm('Voulez-vous vraiment effacer votre sauvegarde et revenir aux valeurs par défaut ?')) return;
+            localStorage.removeItem(STORAGE_KEY);
+            location.reload();
+        }
+
+        function afficherNotification(message) {
+            let notif = document.getElementById('save-notif');
+            if (!notif) {
+                notif = document.createElement('div');
+                notif.id = 'save-notif';
+                notif.className = 'save-notification';
+                document.body.appendChild(notif);
+            }
+            notif.textContent = message;
+            notif.classList.add('show');
+            setTimeout(() => notif.classList.remove('show'), 2500);
+        }
+
         window.onload = () => {
+            const hadSave = chargerDonnees();
             toggleInputs();
             calculate();
+            if (hadSave) {
+                afficherNotification('📂 Données restaurées automatiquement');
+            }
         };
     </script>
 </body>
